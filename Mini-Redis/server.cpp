@@ -3,11 +3,14 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
-#include <cstring>
+#include <string>
+#include <unordered_map>
 
 #define PORT 1234
 #define BUF_SIZE 1024
 #define MAX_EVENTS 10
+
+std::unordered_map<std::string, std::string> db;
 
 void handle_client(int client_fd) {
 	char buf[BUF_SIZE] = {0};
@@ -18,12 +21,40 @@ void handle_client(int client_fd) {
 		return;	
 	}
 
-	std::cout << "Received: " << buf << std::endl;
+	std::string response;
+	std::string request(buf); 
+	
+	if (!request.empty() && (request.back() == '\n')) request.pop_back();
 
-	std::string response = "OK\n";
+	size_t first_space = request.find(' ');
+
+	std::string command;
+	std::string rest;
+	
+	if (first_space != std::string::npos) {
+		command = request.substr(0, first_space);
+		rest = request.substr(first_space + 1);
+	} else {
+		command = request;
+		rest = "";
+	}
+
+	if (command == "SET") {
+		size_t second_space = rest.find(' ');
+		if (second_space == std::string::npos) response = "Error\n";
+		else {
+			std::string key = rest.substr(0, second_space);
+			std::string value = rest.substr(second_space + 1);
+			db[key] = value;
+			response = "OK\n";
+		}
+	} else if (command == "GET") {
+		std::string key = rest;
+		if (db.find(key) != db.end()) response = db[key] + "\n";
+		else response = "null\n";
+	} else response = "Unknown command\n";
+
 	send(client_fd, response.c_str(), response.size(), 0);
-
-	close(client_fd);
 }
 
 int main() {
