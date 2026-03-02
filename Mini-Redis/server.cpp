@@ -5,12 +5,51 @@
 #include <sys/epoll.h>
 #include <string>
 #include <unordered_map>
+#include <sys/socket.h>
 
 #define PORT 1234
 #define BUF_SIZE 1024
 #define MAX_EVENTS 10
 
 std::unordered_map<std::string, std::string> db;
+
+void process_command(int client_fd, const std::string& request) {
+    std::string response;
+
+    size_t first_space = request.find(' ');
+    std::string command, rest;
+
+    if (first_space != std::string::npos) {
+        command = request.substr(0, first_space);
+        rest = request.substr(first_space + 1);
+    } else {
+        command = request;
+        rest = "";
+    }
+
+    if (command == "SET") {
+        size_t second_space = rest.find(' ');
+        if (second_space == std::string::npos) {
+            response = "Error\n";
+        } else {
+            std::string key = rest.substr(0, second_space);
+            std::string value = rest.substr(second_space + 1);
+            db[key] = value;
+            response = "OK\n";
+        }
+    }
+    else if (command == "GET") {
+        if (db.find(rest) != db.end())
+            response = db[rest] + "\n";
+        else
+            response = "null\n";
+    }
+    else {
+        response = "Unknown command\n";
+    }
+
+    send(client_fd, response.c_str(), response.size(), 0);
+}
 
 void handle_client(int client_fd) {
 	char buf[BUF_SIZE] = {0};
@@ -21,40 +60,18 @@ void handle_client(int client_fd) {
 		return;	
 	}
 
-	std::string response;
-	std::string request(buf); 
-	
-	if (!request.empty() && (request.back() == '\n')) request.pop_back();
+	std::string input(buf, bytes_read);
 
-	size_t first_space = request.find(' ');
+	size_t start = 0;
+	while(true) {
+		size_t end = input.find('\n', start);
+		if (end == std::string::npos) break;
 
-	std::string command;
-	std::string rest;
-	
-	if (first_space != std::string::npos) {
-		command = request.substr(0, first_space);
-		rest = request.substr(first_space + 1);
-	} else {
-		command = request;
-		rest = "";
+		std::string line = input.substr(start, end - start);
+		process_command(client_fd, line);
+
+		start = end + 1;
 	}
-
-	if (command == "SET") {
-		size_t second_space = rest.find(' ');
-		if (second_space == std::string::npos) response = "Error\n";
-		else {
-			std::string key = rest.substr(0, second_space);
-			std::string value = rest.substr(second_space + 1);
-			db[key] = value;
-			response = "OK\n";
-		}
-	} else if (command == "GET") {
-		std::string key = rest;
-		if (db.find(key) != db.end()) response = db[key] + "\n";
-		else response = "null\n";
-	} else response = "Unknown command\n";
-
-	send(client_fd, response.c_str(), response.size(), 0);
 }
 
 int main() {
@@ -117,7 +134,6 @@ int main() {
                 		epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event);
 			} else {
 				handle_client(events[i].data.fd);
-				epoll_ctl(epoll_fd, EPOLL_CTL_DEL, events[i].data.fd, nullptr);
 			}
 		}
 	}
@@ -127,4 +143,3 @@ int main() {
 
 	return 0;
 }
-
