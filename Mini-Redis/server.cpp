@@ -6,12 +6,43 @@
 #include <string>
 #include <unordered_map>
 #include <sys/socket.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define PORT 1234
 #define BUF_SIZE 1024
 #define MAX_EVENTS 10
 
 std::unordered_map<std::string, std::string> db;
+
+void set_nonblocking(int sock) {
+    int opts = fcntl(sock, F_GETFL);
+    if (opts < 0) {
+        std::cerr << "F_GETFL failed" << std::endl;
+		exit(EXIT_FAILURE);
+    }
+    opts = opts | O_NONBLOCK;
+    if (fcntl(sock, F_SETFL, opts) < 0) {
+        std::cerr << "F_SETFL failed" << std::endl;
+		exit(EXIT_FAILURE);
+    }
+}
+
+void send_response(int client_fd, const std::string& response) {
+	size_t total_sent = 0;
+
+	while (total_sent < response.size()) {
+		ssize_t bytes_sent = send(client_fd, response.c_str() + total_sent, response.size() - total_sent, 0);
+		
+		if (bytes_sent > 0) total_sent 
+		+= bytes_sent;
+		else if (bytes_sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+		else {
+			close(client_fd);
+			break;
+		}
+	}
+}
 
 void process_command(int client_fd, const std::string& request) {
     std::string response;
@@ -48,29 +79,37 @@ void process_command(int client_fd, const std::string& request) {
         response = "Unknown command\n";
     }
 
-    send(client_fd, response.c_str(), response.size(), 0);
+    send_response(client_fd, response);
 }
 
 void handle_client(int client_fd) {
-	char buf[BUF_SIZE] = {0};
-	
-	int bytes_read = read(client_fd, buf, BUF_SIZE);
-	if (bytes_read <= 0) {
-		close(client_fd);
-		return;	
-	}
+	while (true) {
+		char buf[BUF_SIZE] = {0};
+		
+		ssize_t bytes_read = read(client_fd, buf, BUF_SIZE);
 
-	std::string input(buf, bytes_read);
+		if (bytes_read > 0) {
+			std::string input(buf, bytes_read);
 
-	size_t start = 0;
-	while(true) {
-		size_t end = input.find('\n', start);
-		if (end == std::string::npos) break;
+			size_t start = 0;
+			while(true) {
+				size_t end = input.find('\n', start);
+				if (end == std::string::npos) break;
 
-		std::string line = input.substr(start, end - start);
-		process_command(client_fd, line);
+				std::string line = input.substr(start, end - start);
+				process_command(client_fd, line);
 
-		start = end + 1;
+				start = end + 1;
+			}
+		} else if (bytes_read == 0) {
+			close(client_fd);
+			break;
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			break;
+		} else {
+			close(client_fd);	
+			break;
+		}
 	}
 }
 
@@ -80,6 +119,8 @@ int main() {
 		std::cerr << "Socket failed" << std::endl;
 		exit(EXIT_FAILURE);
 	}
+
+	set_nonblocking(server_fd);  
 
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -104,7 +145,7 @@ int main() {
 	}
 	
 	epoll_event event;
-	event.events = EPOLLIN;
+	event.events = EPOLLIN | EPOLLET;
 	event.data.fd = server_fd;
 
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) == -1) {
@@ -122,16 +163,28 @@ int main() {
 		
 		for (int i = 0; i < n_fds; ++i) {
 			if (events[i].data.fd == server_fd) {
-				int client_fd = accept(server_fd, nullptr, nullptr);
-				if (client_fd == -1) {
-					std::cerr << "Accept failed" << std::endl;
-					continue;
-				}	
+				while(true) {
+					int client_fd = accept(server_fd, nullptr, nullptr);
+					if (client_fd == -1) {
+						if (errno == EAGAIN || errno == EWOULDBLOCK) {
+							break;
+						} else {
+							std::cerr << "Accept failed" << std::endl;
+							continue;
+						}
+					}
 
-				epoll_event client_event;
-               			client_event.events = EPOLLIN;
-                		client_event.data.fd = client_fd;
-                		epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event);
+					set_nonblocking(client_fd);
+
+					epoll_event client_event;
+					client_event.events = EPOLLIN | EPOLLET;
+					client_event.data.fd = client_fd;
+					
+					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event) == -1) {
+						std::cerr << "Epoll_ctl failed for client_fd: " << client_fd << std::endl;
+						close(client_fd);
+					}
+				}
 			} else {
 				handle_client(events[i].data.fd);
 			}
