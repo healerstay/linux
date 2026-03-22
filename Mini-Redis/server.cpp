@@ -75,6 +75,19 @@ void process_command(int client_fd, const std::string& request) {
         else
             response = "null\n";
     }
+	else if (command == "DEL") {
+        size_t erased = db.erase(rest);
+        if (erased > 0)
+            response = "OK\n";
+        else
+            response = "Not Found\n";
+    }
+    else if (command == "EXISTS") {
+        if (db.find(rest) != db.end())
+            response = "1\n";
+        else
+            response = "0\n";
+    }
     else {
         response = "Unknown command\n";
     }
