@@ -8,7 +8,11 @@
 #include <errno.h>
 #include <thread>
 #include <atomic>
+#include <set>
+#include <mutex>
 
+std::set<int> clients;
+std::mutex clients_mutex; 
 std::atomic<bool> server_running(true);
 
 #define PORT 1234
@@ -88,7 +92,10 @@ int main() {
                     }
 
                     set_nonblocking(client_fd);
-
+                    {
+                        std::lock_guard<std::mutex> lock(clients_mutex);
+                        clients.insert(client_fd);
+                    }
                     epoll_event cev{};
                     cev.events = EPOLLIN | EPOLLET;
                     cev.data.fd = client_fd;

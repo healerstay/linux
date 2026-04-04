@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <atomic>
 #include <string>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 extern std::atomic<bool> server_running;
 extern std::atomic<bool> running;
@@ -106,8 +108,14 @@ void process_command(int client_fd, const std::string& request) {
             "SHUTDOWN        -> stop server\n";
     }
     else if (cmd == "SHUTDOWN") {
-        response = "Server shutting down...\n";
-        send_response(client_fd, response);
+        response = "Server shutting down!\n";
+        {
+            std::lock_guard<std::mutex> lock(clients_mutex);
+            for (int fd : clients) {
+                send_response(fd, response);
+            }
+        }
+
         server_running = false;
         running = false;
         return;
@@ -133,11 +141,19 @@ void handle_client(int client_fd) {
             }
         } else if (n == 0) { 
             close(client_fd); 
+            {
+                std::lock_guard<std::mutex> lock(clients_mutex);
+                clients.erase(client_fd);
+            }
             break; 
         }
         else if (errno == EAGAIN || errno == EWOULDBLOCK) break;
         else { 
             close(client_fd); 
+            {
+                std::lock_guard<std::mutex> lock(clients_mutex);
+                clients.erase(client_fd);
+            }
             break; 
         }
     }
