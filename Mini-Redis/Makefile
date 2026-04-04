@@ -1,10 +1,13 @@
-server: server.o shared.o
-	g++ -o server server.o shared.o -pthread
+server: server.o utils.o shared.o
+	g++ -o server server.o utils.o shared.o -pthread
 
-server.o: server.cpp shared.h
+server.o: server.cpp
 	g++ -c server.cpp
 
-shared.o: shared.cpp shared.h
+utils.o: utils.cpp
+	g++ -c utils.cpp
+
+shared.o: shared.cpp
 	g++ -c shared.cpp
 
 run: server

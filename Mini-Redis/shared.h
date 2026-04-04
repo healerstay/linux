@@ -3,6 +3,7 @@
 
 #include <semaphore.h>
 #include <atomic>
+#include <string>
 
 #define MAX_ENTRIES 1024
 #define KEY_SIZE 64
