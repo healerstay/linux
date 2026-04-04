@@ -8,6 +8,7 @@
 #include <string>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <mutex>
 
 extern std::atomic<bool> server_running;
 extern std::atomic<bool> running;

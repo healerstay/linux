@@ -4,6 +4,8 @@
 #include <semaphore.h>
 #include <atomic>
 #include <string>
+#include <set>
+#include <mutex>
 
 #define MAX_ENTRIES 1024
 #define KEY_SIZE 64
@@ -26,6 +28,9 @@ extern int* read_count;
 
 extern int aof_fd;
 extern std::atomic<bool> running;
+
+extern std::set<int> clients;   
+extern std::mutex clients_mutex; 
 
 void init_shared_memory();  
 void init_semaphores();     

@@ -14,4 +14,4 @@ run: server
 	./server
 
 clean:
-	rm -f *.o server
+	rm -f *.o server appendonly.aof
