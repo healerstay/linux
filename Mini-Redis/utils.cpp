@@ -90,6 +90,26 @@ void process_command(int client_fd, const std::string& request) {
         reader_unlock();
         if (!found) response = "null\n";
     }
+    else if (cmd == "DEL") {
+        writer_lock_func();
+        bool deleted = false;
+        for (int i = 0; i < MAX_ENTRIES; i++) {
+            if (db->entries[i].used &&
+                strcmp(db->entries[i].key, rest.c_str()) == 0) {
+                
+                db->entries[i].used = false;
+                deleted = true;
+                break;
+            }
+        }
+        writer_unlock_func();
+
+        if (deleted) {
+            append_to_aof(request);
+            response = "OK\n";
+        } 
+        else response = "null\n";
+    }
     else if (cmd == "KEYS") {
         reader_lock();
         for (int i = 0; i < MAX_ENTRIES; i++) {

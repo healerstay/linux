@@ -138,6 +138,29 @@ void load_aof() {
     }
 }
 
+void aof_compact_thread() {
+    while (running) {
+        sleep(10);
+
+        std::string tmp_file = "appendonly.aof.tmp";
+        int fd = open(tmp_file.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
+        if (fd == -1) continue;
+
+        writer_lock_func();
+        for (int i = 0; i < MAX_ENTRIES; i++) {
+            if (db->entries[i].used) {
+                std::string line = "SET " + std::string(db->entries[i].key) +
+                                    " " + std::string(db->entries[i].value) + "\n";
+                write(fd, line.c_str(), line.size());
+            }
+        }
+        writer_unlock_func();
+
+        close(fd);
+        rename(tmp_file.c_str(), "appendonly.aof");
+    }
+}
+
 void cleanup() { 
     running = false; 
 

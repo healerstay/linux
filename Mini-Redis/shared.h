@@ -43,7 +43,8 @@ void writer_lock_func();
 void writer_unlock_func();  
 
 void append_to_aof(const std::string& cmd);
-void aof_flush_thread();     
+void aof_flush_thread();
+void aof_compact_thread();    
 
 void cleanup();
 

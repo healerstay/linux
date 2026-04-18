@@ -30,6 +30,7 @@ int main() {
     load_aof();
 
     std::thread flush_thread(aof_flush_thread);
+    std::thread compact_thread(aof_compact_thread);
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) { 
@@ -72,7 +73,7 @@ int main() {
     epoll_event events[MAX_EVENTS];
 
     while (server_running) {
-        int n = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
+        int n = epoll_wait(epoll_fd, events, MAX_EVENTS, 1000);
         if (n < 0) { 
             if (errno == EINTR) continue; 
             std::cerr << "epoll_wait failed\n"; 
@@ -111,8 +112,10 @@ int main() {
         }
     }
 
+    server_running = false;
     running = false;
     flush_thread.join();
+    compact_thread.join();
     cleanup();
 
     close(server_fd);
