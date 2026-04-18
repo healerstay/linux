@@ -34,7 +34,10 @@ void send_response(int client_fd, const std::string& response) {
         ssize_t sent = send(client_fd, response.c_str() + total, response.size() - total, 0);
         if (sent > 0) total += sent;
         else if (sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
-        else { close(client_fd); break; }
+        else { 
+            close(client_fd); 
+            break; 
+        }
     }
 }
 
